@@ -15,7 +15,7 @@
 ## Main layer
 fica aclopado a todas as camadas (tem conhecimento de todas) para que seja possível desacoplar as demais
 
-## Objervações
+## Observações
 Camadas externas acessam camadas internas, mas camanas internas não acessam camadas externas. Isso significa que Data Layer pode importar algo de Domain, mas nunca o inverso.
 
 
