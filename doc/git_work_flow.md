@@ -16,7 +16,7 @@ anything new to be developed, must be done on a new branch
 
 - for new refactorations, name the branch with "refactor/<descriptive_name_of_what_the_branch_do>"
 
-### work flow
+## work flow
 
 A new branch must be created for any job, this will keep the main the most stable version of the code. Once the job is done, we must follow the steps:
 
@@ -34,4 +34,15 @@ commands:
       git merge main
 
 3 - open a PR (Pull Resquest) to main
-  
+  3.1 VScode Extension 'GitHub Pull Requests'
+    3.3 Click on button 'Create Pull Request'
+
+
+   ![alt text](assets/git_3_3.png)
+
+
+   3.4 Select the branch e describe the changes done in branch
+
+   ![alt text](assets/git_3_4.png)
+
+   3.5 Press 'create'
