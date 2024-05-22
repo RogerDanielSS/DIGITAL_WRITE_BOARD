@@ -1,6 +1,8 @@
 # Branchs
 
-## Main -> must be the most estable version of the code
+## Main
+
+must be the most estable version of the code
 
 ## Other branchs
 
@@ -10,6 +12,26 @@ anything new to be developed, must be done on a new branch
 
 - for new features, name the branch with "feat/<descriptive_name_of_what_the_branch_do>"
 
-- for new fixes, name the branch with "fix/name_of_the_branch"
+- for new fixes, name the branch with "fix/<descriptive_name_of_what_the_branch_do>"
 
-- for new fixes, name the branch with "fix/name_of_the_branch"
+- for new refactorations, name the branch with "refactor/<descriptive_name_of_what_the_branch_do>"
+
+### work flow
+
+A new branch must be created for any job, this will keep the main the most stable version of the code. Once the job is done, we must follow the steps:
+
+1 - update main
+commands: 
+  1.1 -> change to main
+      git checkout main 
+  1.2 -> update main
+      git pull
+
+2 - update your branch with main
+  2.1 -> return to the branch you are working on
+      git checkout <branch_name>
+  2.2 -> update the branch code with main in order to avoid code conflicts
+      git merge main
+
+3 - open a PR (Pull Resquest) to main
+  
