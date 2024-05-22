@@ -1,0 +1,26 @@
+Processamento de Imagens e Visão Computacional: Você precisará estudar e utilizar bibliotecas de processamento de imagens e visão computacional para detectar 
+e interações do usuário na lousa. Recomenda-se estudar OpenCV, uma biblioteca popular para visão computacional em Python.
+
+Controle por Gestos e Bluetooth: Para implementar o controle por gestos e comunicação via Bluetooth, você pode precisar estudar sobre como capturar e interpretar gestos
+usando câmeras e como estabelecer conexões Bluetooth em Python. Bibliotecas como PyBluez podem ser úteis para a comunicação Bluetooth.
+
+
+Comunicação Web (Servidor Local): Para a comunicação via Web, você pode desenvolver um servidor local que permita a interação com a lousa por meio de um navegador da web.
+Flask ou Django são frameworks populares de desenvolvimento web em Python que podem ser utilizados para isso.
+
+
+de Pincel com Caneta a Laser: Você pode utilizar bibliotecas gráficas como Pygame ou Pyglet para criar uma interface gráfica onde o usuário pode
+desenhar na lousa utilizando uma caneta a laser simulando um pincel.
+
+
+Algoritmos Leves e Otimização de Desempenho: Para garantir que os algoritmos executem de forma eficiente em hardwares de baixo custo,
+é importante estudar sobre algoritmos eficientes e otimização de desempenho em Python. Também é recomendado utilizar técnicas como paralelização
+e distribuição de tarefas.
+
+
+Integração com Câmeras e Projetor Multimídia: Você precisará integrar o sistema com as câmeras do Raspberry Pi ou com a ESPCAM para
+capturar gestos e interações do usuário. Além disso, será necessário integrar o sistema com um projetor multimídia para exibir o conteúdo da lousa.
+
+
+Impressão (Salvar) da Tela: Para implementar a funcionalidade de salvar a tela da lousa, você pode usar bibliotecas de manipulação de imagens como
+Pillow (PIL) para capturar e salvar a imagem da lousa.
