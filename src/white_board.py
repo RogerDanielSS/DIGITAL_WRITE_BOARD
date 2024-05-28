@@ -93,10 +93,11 @@ class DrawingApp(Gtk.Window):
         button_labels_colors = [
             ("Vermelho", (255, 0, 0)),
             ("Azul", (0, 0, 255)),
-            ("Verde", (0, 255, 0)),
+            ("Verde", (0, 100, 0)),
             ("Marrom", (150, 75, 0)),
             ("laranja", (255, 140, 0)),
             ("Preto", (0, 0, 0)),
+            ("Violeta", (148, 0, 211))
         ]
 
         # Criando os botões e conectando-os ao método change_color
@@ -131,7 +132,7 @@ class DrawingApp(Gtk.Window):
         self.last_mouse_pos = None
         self.drawing = False
         self.image = np.ones((600, 800, 3), dtype=np.uint8) * 255
-        self.draw_color = (0, 0, 255)
+        self.draw_color = (255, 0, 0)
 
         self.cap = cv2.VideoCapture(0)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)

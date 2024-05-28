@@ -95,12 +95,3 @@ class DrawingApp(Gtk.Window):
 app = DrawingApp()
 app.connect("destroy", app.on_destroy)
 Gtk.main()
-
-"""
-self.create_color_button("Vermelho", (255, 0, 0), button_box)
-        self.create_color_button("Azul", (0, 0, 255), button_box)
-        self.create_color_button("Verde", (0, 255, 0), button_box)
-        self.create_color_button("Marrom", (150, 75, 0), button_box)
-        self.create_color_button("laranja", (255, 140, 0), button_box)
-        self.create_color_button("preto", (0, 0, 0), button_box)
-"""
