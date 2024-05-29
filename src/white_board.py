@@ -115,6 +115,7 @@ class DrawingApp(Gtk.Window):
         toolbar.insert(separator, 4)
 
         color_buttons = [
+            (0, 0, 255),
             (0, 255, 0),    # Verde
             (128, 0, 128),  # Roxo
             (255, 0, 0), # Vermelho
