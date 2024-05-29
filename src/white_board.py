@@ -14,61 +14,6 @@ gi.require_version('GdkPixbuf', '2.0')
 
 def rgb_to_hex(rgb):
     return '#{0:02x}{1:02x}{2:02x}'.format(*rgb)
-
-class WebcamWindow(Gtk.Window):
-    def __init__(self, cap, resolution):
-        super().__init__(title="Webcam")
-        self.set_default_size(resolution[0], resolution[1])
-        self.cap = cap
-        self.frame = None
-        self.lock = threading.Lock()
-        self.running = True
-
-        self.webcam_area = Gtk.DrawingArea()
-        self.webcam_area.set_size_request(resolution[0], resolution[1])
-        self.webcam_area.connect("draw", self.on_draw)
-        self.add(self.webcam_area)
-
-        self.thread = threading.Thread(target=self.update_frame)
-        self.thread.start()
-
-        GLib.timeout_add(100, self.refresh_gui)  # Atualiza a cada 100 ms
-
-        self.show_all()
-
-    def on_draw(self, widget, cr):
-        if self.frame is not None:
-            frame = cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB)
-            pixbuf = GdkPixbuf.Pixbuf.new_from_data(
-                frame.tobytes(),
-                GdkPixbuf.Colorspace.RGB,
-                False,
-                8,
-                self.frame.shape[1],
-                self.frame.shape[0],
-                self.frame.shape[1] * 3,
-                None,
-                None
-            )
-            Gdk.cairo_set_source_pixbuf(cr, pixbuf, 0, 0)
-            cr.paint()
-
-    def update_frame(self):
-        while self.running:
-            ret, frame = self.cap.read()
-            if ret:
-                with self.lock:
-                    self.frame = frame.copy()
-            time.sleep(0.1)
-
-    def refresh_gui(self):
-        self.webcam_area.queue_draw()
-        return True
-
-    def on_destroy(self, widget):
-        self.running = False
-        self.thread.join()
-
 class WebcamWindow(Gtk.Window):
     def __init__(self, cap, resolution):
         super().__init__(title="Webcam")
@@ -124,11 +69,11 @@ class WebcamWindow(Gtk.Window):
         self.thread.join()
 
 class DrawingApp(Gtk.Window):
-    def __init__(self, resolution):
+    def __init__(self, resolution, camera_index):
         super().__init__(title="Desenho com OpenCV e GTK")
         self.set_default_size(1024, 768)
 
-        self.cap = cv2.VideoCapture(0)
+        self.cap = cv2.VideoCapture(camera_index)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, resolution[0])
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, resolution[1])
 
