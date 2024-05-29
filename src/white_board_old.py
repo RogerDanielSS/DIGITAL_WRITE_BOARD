@@ -95,3 +95,15 @@ class DrawingApp(Gtk.Window):
 app = DrawingApp()
 app.connect("destroy", app.on_destroy)
 Gtk.main()
+
+
+"""
+color_buttons = [
+            (0, 255, 0),    # Verde
+            (128, 0, 128),  # Roxo
+            (255, 0, 0), # Vermelho
+            (255,69,0), # Laranja
+            (238,130,238), #Violeta
+            (0, 0, 0)       # Preto
+        ]
+"""

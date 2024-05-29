@@ -1,27 +1,31 @@
-import cv2
-import numpy as np
 import gi
-import threading
-import time
 gi.require_version('Gtk', '3.0')
 gi.require_version('GdkPixbuf', '2.0')
+
 from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
+import cv2
+import numpy as np
+import threading
+import time
+from pdf2image import convert_from_path
+
+gi.require_version('Gtk', '3.0')
+gi.require_version('GdkPixbuf', '2.0')
 
 def rgb_to_hex(rgb):
     return '#{0:02x}{1:02x}{2:02x}'.format(*rgb)
 
-
 class WebcamWindow(Gtk.Window):
-    def __init__(self, cap):
+    def __init__(self, cap, resolution):
         super().__init__(title="Webcam")
-        self.set_default_size(640, 480)
+        self.set_default_size(resolution[0], resolution[1])
         self.cap = cap
         self.frame = None
         self.lock = threading.Lock()
         self.running = True
 
         self.webcam_area = Gtk.DrawingArea()
-        self.webcam_area.set_size_request(640, 480)
+        self.webcam_area.set_size_request(resolution[0], resolution[1])
         self.webcam_area.connect("draw", self.on_draw)
         self.add(self.webcam_area)
 
@@ -40,9 +44,9 @@ class WebcamWindow(Gtk.Window):
                 GdkPixbuf.Colorspace.RGB,
                 False,
                 8,
-                640,
-                480,
-                640 * 3,
+                self.frame.shape[1],
+                self.frame.shape[0],
+                self.frame.shape[1] * 3,
                 None,
                 None
             )
@@ -53,8 +57,9 @@ class WebcamWindow(Gtk.Window):
         while self.running:
             ret, frame = self.cap.read()
             if ret:
-                self.frame = frame.copy()
-            time.sleep(0.03)
+                with self.lock:
+                    self.frame = frame.copy()
+            time.sleep(0.1)
 
     def refresh_gui(self):
         self.webcam_area.queue_draw()
@@ -65,114 +70,148 @@ class WebcamWindow(Gtk.Window):
         self.thread.join()
 
 class DrawingApp(Gtk.Window):
-    def __init__(self):
+    def __init__(self, resolution):
         super().__init__(title="Desenho com OpenCV e GTK")
-        self.set_default_size(800, 600)
+        self.set_default_size(1024, 768)
+
+        self.cap = cv2.VideoCapture(0)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, resolution[0])
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, resolution[1])
+
+        self.frame = None
+        self.lock = threading.Lock()
+        self.running = True
+        self.cap_resolution = resolution
 
         vbox = Gtk.VBox()
-        vbox.set_margin_top(10)  # Adicionando margem superior
-        vbox.set_margin_bottom(10)  # Adicionando margem inferior
-        vbox.set_margin_start(10)  # Adicionando margem à esquerda
-        vbox.set_margin_end(10)  # Adicionando margem à direita
         self.add(vbox)
-        
+
+        # Adicionar barra de ferramentas
+        toolbar = Gtk.Toolbar()
+        vbox.pack_start(toolbar, False, False, 0)
+
+        new_file_button = Gtk.ToolButton.new_from_stock(Gtk.STOCK_NEW)
+        new_file_button.set_tooltip_text("Novo Arquivo")
+        new_file_button.connect("clicked", self.on_clear)
+        toolbar.insert(new_file_button, 0)
+
+        save_button = Gtk.ToolButton.new_from_stock(Gtk.STOCK_SAVE)
+        save_button.set_tooltip_text("Salvar Arquivo")
+        save_button.connect("clicked", self.on_save)
+        toolbar.insert(save_button, 1)
+
+        toggle_webcam_button = Gtk.ToolButton.new_from_stock(Gtk.STOCK_MEDIA_PLAY)
+        toggle_webcam_button.set_tooltip_text("Abrir/Fechar Webcam")
+        toggle_webcam_button.connect("clicked", self.toggle_webcam)
+        toolbar.insert(toggle_webcam_button, 2)
+
+        insert_pdf_button = Gtk.ToolButton.new_from_stock(Gtk.STOCK_OPEN)
+        insert_pdf_button.set_tooltip_text("Inserir PDF")
+        insert_pdf_button.connect("clicked", self.on_insert_pdf)
+        toolbar.insert(insert_pdf_button, 3)
+
+        separator = Gtk.SeparatorToolItem()
+        separator.set_draw(True)
+        toolbar.insert(separator, 4)
+
+        color_buttons = [
+            (0, 255, 0),    # Verde
+            (128, 0, 128),  # Roxo
+            (255, 0, 0), # Vermelho
+            (255,69,0), # Laranja
+            (238,130,238), #Violeta
+            (0, 0, 0)       # Preto
+        ]
+        self.buttons=[]
+        for color in color_buttons:
+            button = Gtk.ToolButton()
+            color_hex = rgb_to_hex(color)
+            button.set_icon_widget(Gtk.Image.new_from_pixbuf(
+                GdkPixbuf.Pixbuf.new_from_data(
+                    np.full((16, 16, 3), color, dtype=np.uint8).tobytes(),
+                    GdkPixbuf.Colorspace.RGB,
+                    False,
+                    8,
+                    16,
+                    16,
+                    16 * 3,
+                    None,
+                    None
+                )
+            ))
+            button.connect("clicked", self.change_color, color)
+            toolbar.insert(button, -1)
+            self.buttons.append(button)
+
         self.canvas = Gtk.DrawingArea()
-        self.canvas.set_size_request(800, 600)
+        self.canvas.set_size_request(1024, 768)
         self.canvas.connect("draw", self.on_draw)
         vbox.pack_start(self.canvas, True, True, 0)
-        
-        # Usando um grid para organizar os botões
-        button_grid = Gtk.Grid()
-        button_grid.set_row_spacing(10)
-        button_grid.set_column_spacing(10)
-        # Criando um Gtk.Box para os botões de cores
-        color_buttons_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        color_buttons_box.set_center_widget(button_grid)  # Centralizando os botões de cores
-        vbox.pack_start(color_buttons_box, False, False, 0)
-
-        button_labels_colors = [
-            ("Vermelho", (255, 0, 0)),
-            ("Azul", (0, 0, 255)),
-            ("Verde", (0, 100, 0)),
-            ("Marrom", (150, 75, 0)),
-            ("laranja", (255, 140, 0)),
-            ("Preto", (0, 0, 0)),
-            ("Violeta", (148, 0, 211))
-        ]
-
-        # Criando os botões e conectando-os ao método change_color
-        self.buttons = []
-        for i, (label, color) in enumerate(button_labels_colors):
-            button = Gtk.Button(label=label)
-            button.set_size_request(100, 50)
-            button.modify_bg(Gtk.StateType.NORMAL, Gdk.color_parse(rgb_to_hex(color)))
-            button.connect("clicked", self.change_color, color)
-            button_grid.attach(button, i, 0, 1, 1)
-            self.buttons.append(button)
-        vbox.pack_start(Gtk.Label(), False, False, 2)
-        # Botão para apagar
-        self.clear_button = Gtk.Button(label="Apagar")
-        self.clear_button.connect("clicked", self.on_clear)
-        self.clear_button.set_size_request(150, 50)  # Ajustando o tamanho do botão
-        vbox.pack_start(self.clear_button, False, False, 0)
-
-        # Adicionando margem entre o botão Apagar e os botões de cores
-        vbox.pack_start(Gtk.Label(), False, False, 1)
-
-        # Botão para abrir/fechar a webcam
-        self.toggle_webcam_button = Gtk.Button(label="Abrir/fechar Web Cam")
-        self.toggle_webcam_button.connect("clicked", self.toggleWebCam)
-        self.toggle_webcam_button.set_size_request(250, 50)  # Ajustando o tamanho do botão
-        vbox.pack_start(self.toggle_webcam_button, False, False, 0)
-
-        # Adicionando margem entre os botões de cores e o botão Abrir/fechar Web Cam
-        vbox.pack_start(Gtk.Label(), False, False, 1)
 
         self.mouse_pos = (0, 0)
         self.last_mouse_pos = None
         self.drawing = False
-        self.image = np.ones((600, 800, 3), dtype=np.uint8) * 255
-        self.draw_color = (255, 0, 0)
+        self.image = np.ones((768, 1024, 3), dtype=np.uint8) * 255
+        self.draw_color = (0, 255, 0)
 
-        self.cap = cv2.VideoCapture(0)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        
-        self.frame = None
-        self.lock = threading.Lock()
-        self.running = True
-        
         self.thread = threading.Thread(target=self.update_frame)
         self.thread.start()
-        
-        GLib.timeout_add(50, self.refresh_gui)
 
-        self.webcam_window = WebcamWindow(self.cap)
+        self.webcam_window = WebcamWindow(self.cap, resolution)
+
+        GLib.timeout_add(100, self.refresh_gui)
 
         self.show_all()
+
+    def on_insert_pdf(self, widget):
+        dialog = Gtk.FileChooserDialog(
+            title="Selecione um arquivo PDF", 
+            parent=self, 
+            action=Gtk.FileChooserAction.OPEN,
+            buttons=(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OPEN, Gtk.ResponseType.OK)
+        )
+
+        filter_pdf = Gtk.FileFilter()
+        filter_pdf.set_name("PDF files")
+        filter_pdf.add_mime_type("application/pdf")
+        dialog.add_filter(filter_pdf)
+
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
+            pdf_path = dialog.get_filename()
+            self.insert_pdf_to_canvas(pdf_path)
         
+        dialog.destroy()
 
-    def create_color_button(self, label, color, box):
-        button = Gtk.Button(label=label)
-        button.connect("clicked", self.change_color, color)
-        box.pack_start(button, False, False, 0)
+    def insert_pdf_to_canvas(self, pdf_path):
+        from pdf2image import convert_from_path
+        pages = convert_from_path(pdf_path, dpi=200)
+        if pages:
+            pdf_image = np.array(pages[0])
+            pdf_image_resized = cv2.resize(pdf_image, (1024, 768))
+            self.image = cv2.addWeighted(self.image, 0.5, pdf_image_resized, 0.5, 0)
 
-    def change_color(self, widget, color):
-        self.draw_color = color
-    
+        self.canvas.queue_draw()
 
-    def toggleWebCam(self, widget):
+    def toggle_webcam(self, widget):
         if self.webcam_window.running:
             self.webcam_window.running = False
             self.webcam_window.thread.join()
             self.webcam_window.hide()
         else:
-            self.webcam_window = WebcamWindow(self.cap)
-        
+            self.webcam_window = WebcamWindow(self.cap, self.cap_resolution)
+            self.webcam_window.show_all()
+
+    def change_color(self, widget, color):
+        self.draw_color = color
 
     def on_clear(self, widget):
-        self.image = np.ones((600, 800, 3), dtype=np.uint8) * 255
+        self.image = np.ones((768, 1024, 3), dtype=np.uint8) * 255
         self.canvas.queue_draw()
+
+    def on_save(self, widget):
+        # Implementar a lógica para salvar o desenho
+        pass
 
     def on_draw(self, widget, cr):
         h, w, _ = self.image.shape
@@ -202,7 +241,7 @@ class DrawingApp(Gtk.Window):
         if self.frame is not None:
             with self.lock:
                 frame = self.frame.copy()
-            
+
             hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
             lower_red = np.array([0, 120, 70])
             upper_red = np.array([10, 255, 255])
@@ -241,11 +280,12 @@ class DrawingApp(Gtk.Window):
     def on_destroy(self, widget):
         self.running = False
         self.thread.join()
-        self.webcam_window.running = False
-        self.webcam_window.thread.join()
         self.cap.release()
         Gtk.main_quit()
 
-app = DrawingApp()
-app.connect("destroy", app.on_destroy)
-Gtk.main()
+def rgb_to_hex(color):
+    return '#{:02x}{:02x}{:02x}'.format(*color)
+
+
+    
+
