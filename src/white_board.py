@@ -69,6 +69,60 @@ class WebcamWindow(Gtk.Window):
         self.running = False
         self.thread.join()
 
+class WebcamWindow(Gtk.Window):
+    def __init__(self, cap, resolution):
+        super().__init__(title="Webcam")
+        self.set_default_size(resolution[0], resolution[1])
+        self.cap = cap
+        self.frame = None
+        self.lock = threading.Lock()
+        self.running = True
+
+        self.webcam_area = Gtk.DrawingArea()
+        self.webcam_area.set_size_request(resolution[0], resolution[1])
+        self.webcam_area.connect("draw", self.on_draw)
+        self.add(self.webcam_area)
+
+        self.thread = threading.Thread(target=self.update_frame)
+        self.thread.start()
+
+        GLib.timeout_add(100, self.refresh_gui)  # Atualiza a cada 100 ms
+
+        self.show_all()
+
+    def on_draw(self, widget, cr):
+        if self.frame is not None:
+            frame = cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB)
+            pixbuf = GdkPixbuf.Pixbuf.new_from_data(
+                frame.tobytes(),
+                GdkPixbuf.Colorspace.RGB,
+                False,
+                8,
+                self.frame.shape[1],
+                self.frame.shape[0],
+                self.frame.shape[1] * 3,
+                None,
+                None
+            )
+            Gdk.cairo_set_source_pixbuf(cr, pixbuf, 0, 0)
+            cr.paint()
+
+    def update_frame(self):
+        while self.running:
+            ret, frame = self.cap.read()
+            if ret:
+                with self.lock:
+                    self.frame = frame.copy()
+            time.sleep(0.1)
+
+    def refresh_gui(self):
+        self.webcam_area.queue_draw()
+        return True
+
+    def on_destroy(self, widget):
+        self.running = False
+        self.thread.join()
+
 class DrawingApp(Gtk.Window):
     def __init__(self, resolution):
         super().__init__(title="Desenho com OpenCV e GTK")
@@ -110,20 +164,30 @@ class DrawingApp(Gtk.Window):
         insert_pdf_button.connect("clicked", self.on_insert_pdf)
         toolbar.insert(insert_pdf_button, 3)
 
+        prev_page_button = Gtk.ToolButton.new_from_stock(Gtk.STOCK_GO_BACK)
+        prev_page_button.set_tooltip_text("Página Anterior")
+        prev_page_button.connect("clicked", self.prev_page)
+        toolbar.insert(prev_page_button, 4)
+
+        next_page_button = Gtk.ToolButton.new_from_stock(Gtk.STOCK_GO_FORWARD)
+        next_page_button.set_tooltip_text("Próxima Página")
+        next_page_button.connect("clicked", self.next_page)
+        toolbar.insert(next_page_button, 5)
+
         separator = Gtk.SeparatorToolItem()
         separator.set_draw(True)
-        toolbar.insert(separator, 4)
+        toolbar.insert(separator, 6)
 
         color_buttons = [
-            (0, 0, 255),
+            (0, 0, 255),    # Azul
             (0, 255, 0),    # Verde
             (128, 0, 128),  # Roxo
-            (255, 0, 0), # Vermelho
-            (255,69,0), # Laranja
-            (238,130,238), #Violeta
+            (255, 0, 0),    # Vermelho
+            (255, 69, 0),   # Laranja
+            (238, 130, 238),# Violeta
             (0, 0, 0)       # Preto
         ]
-        self.buttons=[]
+        self.buttons = []
         for color in color_buttons:
             button = Gtk.ToolButton()
             color_hex = rgb_to_hex(color)
@@ -155,12 +219,17 @@ class DrawingApp(Gtk.Window):
         self.image = np.ones((768, 1024, 3), dtype=np.uint8) * 255
         self.draw_color = (0, 255, 0)
 
+        self.pdf_pages = []
+        self.current_page_index = 0
+
         self.thread = threading.Thread(target=self.update_frame)
         self.thread.start()
 
         self.webcam_window = WebcamWindow(self.cap, resolution)
 
         GLib.timeout_add(100, self.refresh_gui)
+
+        self.connect("key-press-event", self.on_key_press)  # Conectar evento de tecla pressionada
 
         self.show_all()
 
@@ -180,19 +249,53 @@ class DrawingApp(Gtk.Window):
         response = dialog.run()
         if response == Gtk.ResponseType.OK:
             pdf_path = dialog.get_filename()
-            self.insert_pdf_to_canvas(pdf_path)
+            self.load_pdf(pdf_path)
         
         dialog.destroy()
 
-    def insert_pdf_to_canvas(self, pdf_path):
-        from pdf2image import convert_from_path
-        pages = convert_from_path(pdf_path, dpi=200)
-        if pages:
-            pdf_image = np.array(pages[0])
-            pdf_image_resized = cv2.resize(pdf_image, (1024, 768))
-            self.image = cv2.addWeighted(self.image, 0.5, pdf_image_resized, 0.5, 0)
+    def load_pdf(self, pdf_path):
+        # Mostrar feedback de carregamento
+        loading_dialog = Gtk.MessageDialog(
+            self, 0, Gtk.MessageType.INFO,
+            Gtk.ButtonsType.NONE, "Carregando PDF..."
+        )
+        loading_dialog.show()
+        
+        def thread_func():
+            self.convert_pdf_to_images(pdf_path)
+            GLib.idle_add(loading_dialog.destroy)
 
-        self.canvas.queue_draw()
+        threading.Thread(target=thread_func).start()
+
+    def convert_pdf_to_images(self, pdf_path):
+        self.pdf_pages = convert_from_path(pdf_path, dpi=200)
+        self.current_page_index = 0
+        self.display_page(self.current_page_index)
+
+    def display_page(self, page_index):
+        if self.pdf_pages:
+            # Limpar a tela antes de desenhar a nova página
+            self.image = np.ones((768, 1024, 3), dtype=np.uint8) * 255
+            pdf_image = np.array(self.pdf_pages[page_index])
+            pdf_image_resized = cv2.resize(pdf_image, (1024, 768))
+            self.image = pdf_image_resized
+            self.canvas.queue_draw()
+
+    def prev_page(self, widget):
+        if self.pdf_pages and self.current_page_index > 0:
+            self.current_page_index -= 1
+            self.display_page(self.current_page_index)
+
+    def next_page(self, widget):
+        if self.pdf_pages and self.current_page_index < len(self.pdf_pages) - 1:
+            self.current_page_index += 1
+            self.display_page(self.current_page_index)
+
+    def on_key_press(self, widget, event):
+        if event.keyval in (Gdk.KEY_Left, Gdk.KEY_Page_Down):
+            self.prev_page(None)
+        elif event.keyval in (Gdk.KEY_Right, Gdk.KEY_Page_Up):
+            self.next_page(None)
 
     def toggle_webcam(self, widget):
         if self.webcam_window.running:
@@ -229,6 +332,8 @@ class DrawingApp(Gtk.Window):
         )
         Gdk.cairo_set_source_pixbuf(cr, pixbuf, 0, 0)
         cr.paint()
+        if self.frame is not None:
+            self.detect_laser(self.frame)
 
     def update_frame(self):
         while self.running:
@@ -237,6 +342,32 @@ class DrawingApp(Gtk.Window):
                 with self.lock:
                     self.frame = cv2.resize(frame, (640, 480))
             time.sleep(0.03)
+
+    def detect_laser(self, frame):
+        # Converter a imagem para o espaço de cores HSV
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+        # Definir intervalo de cor para detectar luz brilhante (branca)
+        lower_val = np.array([0, 0, 200])
+        upper_val = np.array([180, 55, 255])
+        
+        mask = cv2.inRange(hsv, lower_val, upper_val)
+        kernel = np.ones((5, 5), np.uint8)
+        mask = cv2.dilate(mask, kernel, iterations=2)
+
+        contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        if contours:
+            # Encontrar o maior contorno
+            c = max(contours, key=cv2.contourArea)
+            M = cv2.moments(c)
+            if M["m00"] != 0:
+                cx = int(M["m10"] / M["m00"])
+                cy = int(M["m01"] / M["m00"])
+                self.mouse_pos = (cx, cy)
+                self.drawing = True
+                self.last_mouse_pos = self.mouse_pos
+            else:
+                self.drawing = False
 
     def process_frame(self):
         if self.frame is not None:
