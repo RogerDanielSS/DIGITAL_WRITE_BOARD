@@ -164,8 +164,4 @@ class Menu(Gtk.Window):
             self.webcam_window.thread.join()
             self.webcam_window.destroy()
 
-if __name__ == "__main__":
-    win = Menu()
-    win.connect("destroy", Gtk.main_quit)
-    win.show_all()
-    Gtk.main()
+
