@@ -5,3 +5,5 @@ choco install python
 pip install opencv-python
 
 python.exe -m pip install --upgrade pip
+
+// follow GTK installation steps: https://www.gtk.org/docs/installations/windows/
