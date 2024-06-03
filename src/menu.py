@@ -1,167 +1,226 @@
-import gi
-gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
+import sys
+import cv2
 import threading
 import time
+from PyQt5.QtWidgets import (QDialog, QApplication, QMainWindow, QVBoxLayout, QPushButton, QLabel, QComboBox, QWidget, QMessageBox, QRadioButton, QButtonGroup, QHBoxLayout)
+from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtCore import Qt, pyqtSignal, QThread
+
 from white_board import DrawingApp
-import cv2
 
-class WebcamSelectionDialog(Gtk.Dialog):
-    def __init__(self, parent):
-        super().__init__(title="Selecione a Webcam", transient_for=parent, flags=0)
-        self.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OK, Gtk.ResponseType.OK)
+class WebcamThread(QThread):
+    image_data = pyqtSignal(QImage)
+    error_message = pyqtSignal(str)
 
-        self.set_default_size(680, 400)
+    def __init__(self, camera_index):
+        super().__init__()
+        self.camera_index = camera_index
+        self.running = True
 
-        box = self.get_content_area()
+    def run(self):
+        cap = cv2.VideoCapture(self.camera_index)
+        if not cap.isOpened():
+            self.error_message.emit("Erro ao abrir a câmera")
+            return
 
-        label = Gtk.Label(label="Selecione a webcam:")
-        box.add(label)
+        while self.running:
+            ret, frame = cap.read()
+            if ret:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                height, width, channel = frame.shape
+                q_img = QImage(frame.data, width, height, width * channel, QImage.Format_RGB888)
+                self.image_data.emit(q_img)
+                time.sleep(0.03)
+        cap.release()
 
-        self.combobox = Gtk.ComboBoxText()
+    def stop(self):
+        self.running = False
+        self.wait()
+
+class WebcamSelectionDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Selecione a Webcam")
+        self.setFixedSize(680, 400)
+
+        layout = QVBoxLayout(self)
+        self.setLayout(layout)
+
+        label = QLabel("Selecione a webcam:")
+        layout.addWidget(label)
+
+        self.combobox = QComboBox()
         for i in range(5):  # Tentar detectar até 5 webcams
             cap = cv2.VideoCapture(i)
-            if cap is not None and cap.read()[0]:
-                self.combobox.append_text(f"Webcam {i}")
+            if cap.isOpened() and cap.read()[0]:
+                self.combobox.addItem(f"Webcam {i}")
                 cap.release()
-        self.combobox.set_active(0)
-        box.add(self.combobox)
+        layout.addWidget(self.combobox)
 
-        self.image = Gtk.Image()
-        box.add(self.image)
+        self.image_label = QLabel()
+        layout.addWidget(self.image_label)
 
-        self.show_all()
-
-        self.running = False
         self.thread = None
 
-        self.combobox.connect("changed", self.on_combobox_changed)
-        self.connect("response", self.on_response)
-
-        # Iniciar o preview da webcam
+        self.combobox.currentIndexChanged.connect(self.on_combobox_changed)
+        self.add_buttons()
         self.start_preview()
 
-    def on_combobox_changed(self, combobox):
+        # Configurações de estilo
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #9dcfff;
+                border-radius: 10px;
+            }
+            QPushButton {
+                background-color: #1E90FF;
+                border: none;
+                color: white;
+                text-align: center;
+                font-size: 16px;
+                padding: 10px 20px;
+                margin: 4px 2px;
+                border-radius: 8px;
+            }
+             QProgressBar {
+                border: none;
+                text-align: center;
+                font-size: 16px;
+                margin: 4px 2px;
+                border-radius: 8px;
+            }
+        """)
+
+    def add_buttons(self):
+        button_layout = QHBoxLayout()
+
+        ok_button = QPushButton("OK")
+        ok_button.clicked.connect(self.accept)
+        button_layout.addWidget(ok_button)
+
+        cancel_button = QPushButton("Cancelar")
+        cancel_button.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_button)
+
+        self.layout().addLayout(button_layout)
+
+    def on_combobox_changed(self):
         self.stop_preview()
         self.start_preview()
 
     def start_preview(self):
-        self.running = True
-        self.thread = threading.Thread(target=self.update_preview)
+        self.thread = WebcamThread(self.get_selected_camera_index())
+        self.thread.image_data.connect(self.update_preview)
+        self.thread.error_message.connect(self.show_error_message)
         self.thread.start()
 
     def stop_preview(self):
-        self.running = False
         if self.thread is not None:
-            self.thread.join()
+            self.thread.stop()
+            self.thread = None
 
-    def update_preview(self):
-        selected_camera_index = self.get_selected_camera_index()
-        cap = cv2.VideoCapture(selected_camera_index)
-        if not cap.isOpened():
-            Gdk.threads_add_idle(GLib.PRIORITY_DEFAULT, self.show_error_message, "Erro ao abrir a câmera")
-            return
-        while self.running and cap.isOpened():
-            ret, frame = cap.read()
-            if ret:
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                height, width, channels = frame.shape
-                rowstride = width * channels
-                pb = GdkPixbuf.Pixbuf.new_from_data(frame.tobytes(), GdkPixbuf.Colorspace.RGB, False, 8, width, height, rowstride)
-                Gdk.threads_add_idle(GLib.PRIORITY_DEFAULT, self.image.set_from_pixbuf, pb)
-            time.sleep(0.03)
-        cap.release()
+    def update_preview(self, q_img):
+        pixmap = QPixmap.fromImage(q_img)
+        self.image_label.setPixmap(pixmap.scaledToWidth(640))
 
     def show_error_message(self, message):
-        dialog = Gtk.MessageDialog(parent=self, flags=0, message_type=Gtk.MessageType.ERROR, buttons=Gtk.ButtonsType.OK, text=message)
-        dialog.run()
-        dialog.destroy()
-
-    def on_response(self, dialog, response):
-        self.stop_preview()
-        dialog.destroy()
+        QMessageBox.critical(self, "Erro", message)
 
     def get_selected_camera_index(self):
-        active_text = self.combobox.get_active_text()
+        active_text = self.combobox.currentText()
         if active_text:
             return int(active_text.split()[-1])
         return 0
 
-class Menu(Gtk.Window):
+class Menu(QMainWindow):
     def __init__(self):
-        Gtk.Window.__init__(self, title="Bem vindo a Losa Digital")
-        self.set_default_size(500, 200)
+        super().__init__()
+        self.setWindowTitle("Bem vindo a Losa Digital")
+        self.setFixedSize(500, 310)
 
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        self.add(box)
+        layout = QVBoxLayout()
+        central_widget = QWidget()
+        central_widget.setLayout(layout)
+        self.setCentralWidget(central_widget)
 
-        # Inicializar o índice da câmera selecionada com um valor padrão
         self.selected_camera_index = 0
-        self.webcam_window = None
 
-        # Botão para selecionar a webcam
-        button = Gtk.Button(label="Selecionar Webcam")
-        button.connect("clicked", self.on_button_clicked)
-        box.add(button)
+        button_select_webcam = QPushButton("Selecionar Webcam")
+        button_select_webcam.clicked.connect(self.show_webcam_selection)
+        layout.addWidget(button_select_webcam)
 
-        # Opções de resolução
-        resolution_label = Gtk.Label(label="Resolução da imagem:")
-        box.add(resolution_label)
+        label_resolution = QLabel("Resolução da imagem:")
+        layout.addWidget(label_resolution)
 
-        self.resolution_group = Gtk.RadioButton.new_with_label_from_widget(None, "640x480")
-        box.add(self.resolution_group)
+        self.resolution_group = QButtonGroup(self)
+        self.add_resolution_option("640x480", layout)
+        self.add_resolution_option("800x600", layout)
+        self.add_resolution_option("1280x720", layout)
 
-        resolution_800x600 = Gtk.RadioButton.new_with_label_from_widget(self.resolution_group, "800x600")
-        box.add(resolution_800x600)
+        self.button_start = QPushButton("Iniciar")
+        self.button_start.clicked.connect(self.start)
+        layout.addWidget(self.button_start)
+        # Configurações de estilo
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #9dcfff;
+                border-radius: 10px;
+            }
+            QPushButton {
+                background-color: #1E90FF;
+                border: none;
+                color: white;
+                text-align: center;
+                font-size: 16px;
+                padding: 10px 20px;
+                margin: 4px 2px;
+                border-radius: 8px;
+            }
+             QProgressBar {
+                border: none;
+                text-align: center;
+                font-size: 16px;
+                margin: 4px 2px;
+                border-radius: 8px;
+            }
+        """)
 
-        resolution_1280x720 = Gtk.RadioButton.new_with_label_from_widget(self.resolution_group, "1280x720")
-        box.add(resolution_1280x720)
+    def add_resolution_option(self, text, layout):
+        resolution_button = QRadioButton(text)
+        self.resolution_group.addButton(resolution_button)
+        layout.addWidget(resolution_button)
 
-        # Botão iniciar
-        start_button = Gtk.Button(label="Iniciar")
-        start_button.connect("clicked", self.start)
-        box.add(start_button)
-
-        self.show_all()
-
-    def on_button_clicked(self, widget):
+    def show_webcam_selection(self):
         dialog = WebcamSelectionDialog(self)
-        response = dialog.run()
-        if response != Gtk.ResponseType.OK:
+        if dialog.exec_() == QDialog.Accepted:
             self.selected_camera_index = dialog.get_selected_camera_index()
             print(f"Webcam selecionada: {self.selected_camera_index}")
-        dialog.destroy()
+            dialog.stop_preview()
 
-    def on_start_button_clicked(self, widget):
+    def start(self):
+        self.stop_all_threads()  # Ensure all threads are stopped before starting a new session
         selected_resolution = self.get_selected_resolution()
         print(f"Resolução selecionada: {selected_resolution}")
-        DrawingApp(selected_resolution, self.selected_camera_index)
+        self.app = DrawingApp(selected_resolution, self.selected_camera_index)
+        if self.app.cap.isOpened():
+            self.app.show()
+            self.hide()
+        else:
+            QMessageBox.critical(self, "Erro", "Não foi possível acessar a câmera. Verifique se está conectada e tente novamente.")
+
+    def stop_all_threads(self):
+        for widget in QApplication.topLevelWidgets():
+            if isinstance(widget, WebcamSelectionDialog):
+                widget.stop_preview()
+    
+    def closeEvent(self, event):
+        if hasattr(self, 'app') and self.app:
+            self.app.stop_all_threads()
+        event.accept()
 
     def get_selected_resolution(self):
-        if self.resolution_group.get_active():
-            return (640, 480)
-        elif self.resolution_group.get_group()[1].get_active():
-            return (800, 600)
-        elif self.resolution_group.get_group()[2].get_active():
-            return (1280, 720)
-        return (640, 480)
-    
-    def start(self, button):
-        print("Iniciar pressionado")
-        selected_resolution = self.get_selected_resolution()
-        print("Resolução selecionada ", selected_resolution)
-        self.app = DrawingApp(selected_resolution,self.selected_camera_index)
-        self.app.connect("destroy", self.on_app_destroy)
-        self.app.show_all()
-        self.hide()
-        self.webcam_window = self.app.webcam_window
-
-    def on_app_destroy(self, widget):
-        self.app.on_destroy(widget)
-        self.destroy()
-        if self.webcam_window:
-            self.webcam_window.running = False
-            self.webcam_window.thread.join()
-            self.webcam_window.destroy()
-
-
+        resolutions = [(640, 480), (800, 600), (1280, 720)]
+        for i, button in enumerate(self.resolution_group.buttons()):
+            if button.isChecked():
+                return resolutions[i]
+        return resolutions[0]

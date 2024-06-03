@@ -1,10 +1,15 @@
+import sys
 from menu import Menu
-import gi
-gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk
+from PyQt5.QtWidgets import QApplication
 
 if __name__ == "__main__":
-    win = Menu()
-    win.connect("destroy", Gtk.main_quit)
-    win.show_all()
-    Gtk.main()
+    app = QApplication(sys.argv)
+    window = Menu()
+    window.show()
+    
+    def handle_exit():
+        if hasattr(window, 'app') and window.app:
+            window.app.stop_all_threads()
+    
+    app.aboutToQuit.connect(handle_exit)
+    sys.exit(app.exec_())
