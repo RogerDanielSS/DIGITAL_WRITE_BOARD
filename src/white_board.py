@@ -263,12 +263,15 @@ class DrawingApp(QMainWindow):
 
     def detect_laser(self, frame):
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        lower_val = np.array([0, 0, 200])
-        upper_val = np.array([180, 55, 255])
-        mask = cv2.inRange(hsv, lower_val, upper_val)
-        kernel = np.ones((5, 5), np.uint8)
-        mask = cv2.dilate(mask, kernel, iterations=2)
+        lower_red = np.array([0, 120, 70])
+        upper_red = np.array([10, 255, 255])
+        mask1 = cv2.inRange(hsv, lower_red, upper_red)
 
+        lower_red = np.array([170, 120, 70])
+        upper_red = np.array([180, 255, 255])
+        mask2 = cv2.inRange(hsv, lower_red, upper_red)
+
+        mask = mask1 + mask2
         contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         if contours:
             largest_contour = max(contours, key=cv2.contourArea)
