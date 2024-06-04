@@ -2,13 +2,14 @@ import sys
 import os
 import cv2
 import numpy as np
-from PyQt5.QtWidgets import QApplication, QMainWindow, QAction, QFileDialog, QLabel, QToolBar
+from PyQt5.QtWidgets import QApplication, QMainWindow, QAction, QFileDialog, QLabel, QToolBar,QMessageBox
 from PyQt5.QtGui import QImage, QPixmap, QColor, QIcon
 from PyQt5.QtCore import QTimer, Qt, QPoint
 
 import threading
 import time
 
+from CustomMessageBox import CustomMessageBox
 from PDFLoaderThread import PDFLoaderThread
 
 def rgb_to_hex(rgb):
@@ -23,6 +24,7 @@ class WebcamWindow(QMainWindow):
         self.frame = None
         self.lock = threading.Lock()
         self.running = True
+        
 
         self.label = QLabel(self)
         self.setCentralWidget(self.label)
@@ -65,7 +67,7 @@ class DrawingApp(QMainWindow):
         self.setWindowTitle("Desenho com OpenCV e PyQt5")
         self.setGeometry(100, 100, 1024, 768)
         scriptDir = os.path.dirname(os.path.realpath(__file__))
-
+        self.progess= CustomMessageBox()
         self.cap = cv2.VideoCapture(camera_index)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, resolution[0])
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, resolution[1])
@@ -96,11 +98,13 @@ class DrawingApp(QMainWindow):
 
         self.color_buttons = [
             (0, 0, 255),  # Azul
-            (0, 255, 0),  # Verde
+            (0,100,0),  # Verde
             (128, 0, 128),  # Roxo
             (255, 0, 0),  # Vermelho
             (255, 69, 0),  # Laranja
             (238, 130, 238),  # Violeta
+            (47,79,79), #DarkSlateGray
+            (139,69,19), #SaddleBrown
             (0, 0, 0)  # Preto
         ]
 
@@ -116,7 +120,7 @@ class DrawingApp(QMainWindow):
         self.last_mouse_pos = None
         self.drawing = False
         self.image = np.ones((768, 1024, 3), dtype=np.uint8) * 255
-        self.draw_color = (0, 255, 0)
+        self.draw_color = (0, 100, 0)
 
         self.pdf_pages = []
         self.current_page_index = 0
@@ -130,6 +134,39 @@ class DrawingApp(QMainWindow):
         self.thread = threading.Thread(target=self.update_frame)
         self.thread.start()
 
+        # Configurações de estilo
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #9dcfff;
+                border-radius: 10px;
+            }
+            QPushButton {
+                background-color: #1E90FF;
+                border: none;
+                color: white;
+                text-align: center;
+                font-size: 16px;
+                padding: 10px 20px;
+                margin: 4px 2px;
+                border-radius: 8px;
+            }
+             QProgressBar {
+                border: none;
+                text-align: center;
+                font-size: 16px;
+                margin: 4px 2px;
+                border-radius: 8px;
+            }
+            QProgressBar::chunk {
+                background-color: #1E90FF; /* Cor da barra de progresso */
+                width: 10px; /* Largura da barra de progresso */
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background-color: #1C86EE;
+            }
+        """)
+
     def create_color_icon(self, color):
         pixmap = QPixmap(16, 16)
         pixmap.fill(QColor(*color))
@@ -140,13 +177,31 @@ class DrawingApp(QMainWindow):
         file_name, _ = QFileDialog.getOpenFileName(self, "Selecione um arquivo PDF", "", "PDF Files (*.pdf)", options=options)
         if file_name:
             self.load_pdf(file_name)
+    
+    def show_progress_bar(self):
+        self.progress = CustomMessageBox(self)  
+        self.progress.setWindowTitle("Carrengando arquivo")
+        self.progress.setText("Por favor, espere enquanto o arquivo está sendo carregado...")
+        self.progress.show_progress_bar() 
+        self.progress.setStandardButtons(QMessageBox.Cancel)
+        self.progress.setGeometry(200, 300, 600, 600)
+        self.progress.show()
+         
 
     def load_pdf(self, pdf_path):
+        self.show_progress_bar()
         self.pdf_loader_thread = PDFLoaderThread(pdf_path)
         self.pdf_loader_thread.pdf_loaded.connect(self.on_pdf_loaded)
+        self.pdf_loader_thread.progress.connect(self.update_progress)
         self.pdf_loader_thread.start()
 
+    def update_progress(self, value):
+        self.progress.set_progress_value(value)
+
+
     def on_pdf_loaded(self, pages):
+        self.progress.hide_progress_bar()
+        self.progress.accept() 
         self.pdf_pages = pages
         self.current_page_index = 0
         self.display_page(self.current_page_index)
