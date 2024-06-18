@@ -2,8 +2,16 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManage
 
 choco install python
 
+python.exe -m pip install --upgrade pip
+
 pip install opencv-python
 
-python.exe -m pip install --upgrade pip
+pip install PyQt5
+
+pip install pdf2image
+
+pip install PyPDF2
+
+pip install camelot-py[cv]
 
 // follow GTK installation steps: https://www.gtk.org/docs/installations/windows/
